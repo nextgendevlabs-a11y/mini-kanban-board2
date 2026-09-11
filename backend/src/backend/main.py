@@ -664,46 +664,46 @@ def create_board(input: CreateBoardRequest) -> dict:
     return database.create_board(input.name)
 
 
-@app.delete("/api/v1/boards/{board_id}", operation_id="deleteBoard", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Boards"])
-def delete_board(board_id: str) -> dict:
-    return database.delete_board(board_id)
+@app.delete("/api/v1/boards/{boardId}", operation_id="deleteBoard", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Boards"])
+def delete_board(boardId: str) -> dict:
+    return database.delete_board(boardId)
 
 
-@app.post("/api/v1/boards/{board_id}/columns", operation_id="addColumn", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Columns"])
-def add_column(board_id: str, input: NameRequest) -> dict:
-    return database.add_column(board_id, input.name)
+@app.post("/api/v1/boards/{boardId}/columns", operation_id="addColumn", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Columns"])
+def add_column(boardId: str, input: NameRequest) -> dict:
+    return database.add_column(boardId, input.name)
 
 
-@app.patch("/api/v1/columns/{column_id}", operation_id="renameColumn", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Columns"])
-def rename_column(column_id: str, input: NameRequest) -> dict:
-    return database.rename_column(column_id, input.name)
+@app.patch("/api/v1/columns/{columnId}", operation_id="renameColumn", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Columns"])
+def rename_column(columnId: str, input: NameRequest) -> dict:
+    return database.rename_column(columnId, input.name)
 
 
-@app.delete("/api/v1/columns/{column_id}", operation_id="deleteColumn", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Columns"])
-def delete_column(column_id: str, input: DeleteColumnRequest | None = Body(default=None)) -> dict:
-    return database.delete_column(column_id, input.destinationColumnId if input else None)
+@app.delete("/api/v1/columns/{columnId}", operation_id="deleteColumn", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Columns"])
+def delete_column(columnId: str, input: DeleteColumnRequest | None = Body(default=None)) -> dict:
+    return database.delete_column(columnId, input.destinationColumnId if input else None)
 
 
-@app.put("/api/v1/boards/{board_id}/columns/order", operation_id="reorderColumns", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Columns"])
-def reorder_columns(board_id: str, input: ReorderColumnsRequest) -> dict:
-    return database.reorder_columns(board_id, input.orderedColumnIds)
+@app.put("/api/v1/boards/{boardId}/columns/order", operation_id="reorderColumns", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Columns"])
+def reorder_columns(boardId: str, input: ReorderColumnsRequest) -> dict:
+    return database.reorder_columns(boardId, input.orderedColumnIds)
 
 
-@app.post("/api/v1/boards/{board_id}/labels", operation_id="createLabel", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Labels"])
-def create_label(board_id: str, input: CreateLabelInput) -> dict:
-    if input.boardId != board_id:
+@app.post("/api/v1/boards/{boardId}/labels", operation_id="createLabel", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Labels"])
+def create_label(boardId: str, input: CreateLabelInput) -> dict:
+    if input.boardId != boardId:
         raise ServiceError("VALIDATION", "boardId must match the path board.")
     return database.create_label(input)
 
 
-@app.patch("/api/v1/labels/{label_id}", operation_id="renameLabel", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Labels"])
-def rename_label(label_id: str, input: NameRequest) -> dict:
-    return database.rename_label(label_id, input.name)
+@app.patch("/api/v1/labels/{labelId}", operation_id="renameLabel", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Labels"])
+def rename_label(labelId: str, input: NameRequest) -> dict:
+    return database.rename_label(labelId, input.name)
 
 
-@app.delete("/api/v1/labels/{label_id}", operation_id="deleteLabel", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Labels"])
-def delete_label(label_id: str) -> dict:
-    return database.delete_label(label_id)
+@app.delete("/api/v1/labels/{labelId}", operation_id="deleteLabel", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Labels"])
+def delete_label(labelId: str) -> dict:
+    return database.delete_label(labelId)
 
 
 @app.post("/api/v1/tasks", operation_id="createTask", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Tasks"])
@@ -711,64 +711,64 @@ def create_task(input: CreateTaskInput) -> dict:
     return database.create_task(input)
 
 
-@app.patch("/api/v1/tasks/{task_id}", operation_id="updateTask", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Tasks"])
-def update_task(task_id: str, input: UpdateTaskInput) -> dict:
-    return database.update_task(task_id, input)
+@app.patch("/api/v1/tasks/{taskId}", operation_id="updateTask", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Tasks"])
+def update_task(taskId: str, input: UpdateTaskInput) -> dict:
+    return database.update_task(taskId, input)
 
 
-@app.delete("/api/v1/tasks/{task_id}", operation_id="deleteTask", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Tasks"])
-def delete_task(task_id: str) -> dict:
-    return database.delete_task(task_id)
+@app.delete("/api/v1/tasks/{taskId}", operation_id="deleteTask", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Tasks"])
+def delete_task(taskId: str) -> dict:
+    return database.delete_task(taskId)
 
 
-@app.post("/api/v1/tasks/{task_id}/move", operation_id="moveTask", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Tasks"])
-def move_task(task_id: str, input: MoveTaskRequest) -> dict:
-    return database.move_task(task_id, input.destinationColumnId, input.destinationIndex)
+@app.post("/api/v1/tasks/{taskId}/move", operation_id="moveTask", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Tasks"])
+def move_task(taskId: str, input: MoveTaskRequest) -> dict:
+    return database.move_task(taskId, input.destinationColumnId, input.destinationIndex)
 
 
-@app.post("/api/v1/tasks/{task_id}/archive", operation_id="archiveTask", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Tasks"])
-def archive_task(task_id: str) -> dict:
-    return database.archive_task(task_id)
+@app.post("/api/v1/tasks/{taskId}/archive", operation_id="archiveTask", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Tasks"])
+def archive_task(taskId: str) -> dict:
+    return database.archive_task(taskId)
 
 
-@app.post("/api/v1/tasks/{task_id}/restore", operation_id="restoreTask", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Tasks"])
-def restore_task(task_id: str) -> dict:
-    return database.restore_task(task_id)
+@app.post("/api/v1/tasks/{taskId}/restore", operation_id="restoreTask", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Tasks"])
+def restore_task(taskId: str) -> dict:
+    return database.restore_task(taskId)
 
 
-@app.post("/api/v1/tasks/{task_id}/checklist", operation_id="addChecklistItem", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Tasks"])
-def add_checklist_item(task_id: str, input: AddChecklistItemRequest) -> dict:
-    return database.add_checklist_item(task_id, input.text)
+@app.post("/api/v1/tasks/{taskId}/checklist", operation_id="addChecklistItem", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Tasks"])
+def add_checklist_item(taskId: str, input: AddChecklistItemRequest) -> dict:
+    return database.add_checklist_item(taskId, input.text)
 
 
-@app.patch("/api/v1/tasks/{task_id}/checklist/{item_id}", operation_id="updateChecklistItem", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Tasks"])
-def update_checklist_item(task_id: str, item_id: str, input: UpdateChecklistItemRequest) -> dict:
-    return database.update_checklist_item(task_id, item_id, input)
+@app.patch("/api/v1/tasks/{taskId}/checklist/{itemId}", operation_id="updateChecklistItem", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Tasks"])
+def update_checklist_item(taskId: str, itemId: str, input: UpdateChecklistItemRequest) -> dict:
+    return database.update_checklist_item(taskId, itemId, input)
 
 
-@app.delete("/api/v1/tasks/{task_id}/checklist/{item_id}", operation_id="deleteChecklistItem", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Tasks"])
-def delete_checklist_item(task_id: str, item_id: str) -> dict:
-    return database.delete_checklist_item(task_id, item_id)
+@app.delete("/api/v1/tasks/{taskId}/checklist/{itemId}", operation_id="deleteChecklistItem", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Tasks"])
+def delete_checklist_item(taskId: str, itemId: str) -> dict:
+    return database.delete_checklist_item(taskId, itemId)
 
 
-@app.post("/api/v1/tasks/{task_id}/comments", operation_id="addComment", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Collaboration"])
-def add_comment(task_id: str, input: AddCommentRequest) -> dict:
-    return database.add_comment(task_id, input.body)
+@app.post("/api/v1/tasks/{taskId}/comments", operation_id="addComment", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Collaboration"])
+def add_comment(taskId: str, input: AddCommentRequest) -> dict:
+    return database.add_comment(taskId, input.body)
 
 
-@app.patch("/api/v1/tasks/{task_id}/comments/{comment_id}/reaction", operation_id="toggleReaction", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Collaboration"])
-def toggle_reaction(task_id: str, comment_id: str, input: ToggleReactionRequest) -> dict:
-    return database.toggle_reaction(task_id, comment_id, input.reaction)
+@app.patch("/api/v1/tasks/{taskId}/comments/{commentId}/reaction", operation_id="toggleReaction", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Collaboration"])
+def toggle_reaction(taskId: str, commentId: str, input: ToggleReactionRequest) -> dict:
+    return database.toggle_reaction(taskId, commentId, input.reaction)
 
 
-@app.post("/api/v1/tasks/{task_id}/attachments", operation_id="addAttachment", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Collaboration"])
-def add_attachment(task_id: str, input: AddAttachmentRequest) -> dict:
-    return database.add_attachment(task_id, input)
+@app.post("/api/v1/tasks/{taskId}/attachments", operation_id="addAttachment", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Collaboration"])
+def add_attachment(taskId: str, input: AddAttachmentRequest) -> dict:
+    return database.add_attachment(taskId, input)
 
 
-@app.delete("/api/v1/tasks/{task_id}/attachments/{attachment_id}", operation_id="removeAttachment", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Collaboration"])
-def remove_attachment(task_id: str, attachment_id: str) -> dict:
-    return database.remove_attachment(task_id, attachment_id)
+@app.delete("/api/v1/tasks/{taskId}/attachments/{attachmentId}", operation_id="removeAttachment", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Collaboration"])
+def remove_attachment(taskId: str, attachmentId: str) -> dict:
+    return database.remove_attachment(taskId, attachmentId)
 
 
 @app.post("/api/v1/members/invitations", operation_id="inviteMember", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Collaboration"])
@@ -776,11 +776,11 @@ def invite_member(input: InviteMemberRequest) -> dict:
     return database.invite_member(input.email)
 
 
-@app.post("/api/v1/invitations/{invitation_id}/accept", operation_id="acceptInvitation", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Collaboration"])
-def accept_invitation(invitation_id: str) -> dict:
-    return database.accept_invitation(invitation_id)
+@app.post("/api/v1/invitations/{invitationId}/accept", operation_id="acceptInvitation", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Collaboration"])
+def accept_invitation(invitationId: str) -> dict:
+    return database.accept_invitation(invitationId)
 
 
-@app.patch("/api/v1/notifications/{notification_id}/read", operation_id="markNotificationRead", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Notifications"])
-def mark_notification_read(notification_id: str) -> dict:
-    return database.mark_notification_read(notification_id)
+@app.patch("/api/v1/notifications/{notificationId}/read", operation_id="markNotificationRead", response_model=WorkspaceSnapshot, response_model_exclude_none=True, tags=["Notifications"])
+def mark_notification_read(notificationId: str) -> dict:
+    return database.mark_notification_read(notificationId)

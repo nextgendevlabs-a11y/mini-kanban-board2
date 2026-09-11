@@ -9,4 +9,9 @@ export default defineConfig({
     globals: true,
     css: true,
   },
+  server: {
+    proxy: {
+      '/api': 'http://localhost:8000',
+    },
+  },
 })

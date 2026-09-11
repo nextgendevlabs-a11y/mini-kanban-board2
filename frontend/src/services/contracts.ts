@@ -31,10 +31,12 @@ export interface DeleteColumnInput {
 }
 
 export interface CreateLabelInput { boardId: string; name: string; color: string }
+export interface CreateWorkspaceInput { name: string; memberEmails: string[] }
 
 export interface KanbanService {
   getWorkspace(): Promise<WorkspaceSnapshot>
   resetDemo(): Promise<WorkspaceSnapshot>
+  createWorkspace(input: CreateWorkspaceInput): Promise<WorkspaceSnapshot>
   createBoard(name: string): Promise<WorkspaceSnapshot>
   deleteBoard(boardId: string): Promise<WorkspaceSnapshot>
   addColumn(boardId: string, name: string): Promise<WorkspaceSnapshot>

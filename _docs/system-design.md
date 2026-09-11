@@ -20,18 +20,18 @@ React UI
           ▼
      KanbanService interface
           │
-          ├─ MockKanbanService (current implementation)
+          ├─ MockKanbanService (test implementation)
           │    ├─ seeded workspace factory
           │    └─ localStorage persistence
           │
-          └─ HttpKanbanService (future implementation)
-               └─ REST/JSON or RPC adapter
+          └─ HttpKanbanService (current implementation)
+               └─ REST/JSON adapter to the FastAPI backend
 ```
 
 The UI never reads storage, constructs API URLs, or mutates domain collections directly.
-Every backend-shaped operation goes through `src/services/index.ts` and the
-`KanbanService` interface. The mock implementation is intentionally asynchronous so
-loading, error, and replacement behavior can be tested before a real backend exists.
+Every backend-shaped operation goes through `frontend/src/services/index.ts` and the
+`KanbanService` interface. The HTTP implementation is the application default. The mock
+remains available for isolated component and service tests.
 
 ## 3. Domain model
 
@@ -90,8 +90,8 @@ concerns.
 - Mutations preserve the last visible snapshot if a service call fails.
 - Invalid titles, labels, mentions, permissions, and column deletion destinations are
   rejected with typed `ServiceError` codes.
-- The mock persists successful mutations after each call.
-- Resetting the demo replaces persisted state with a fresh seed and is explicit.
+- The HTTP service maps structured backend errors to `ServiceError` values.
+- Resetting the demo replaces the backend workspace with a fresh seed and is explicit.
 
 ## 7. Testing strategy
 
@@ -104,8 +104,8 @@ concerns.
 
 ## 8. Production evolution
 
-Replace `createMockKanbanService()` with `createHttpKanbanService()` while keeping the
-React UI and domain types. The HTTP adapter should retain the same method signatures,
-map server errors to `ServiceError`, and use server-side authorization as the source of
+The frontend uses `createHttpKanbanService()` while keeping the React UI and domain
+types independent of transport. The adapter retains the same method signatures, maps
+server errors to `ServiceError`, and uses server-side authorization as the source of
 truth. A later backend can use PostgreSQL with tables for teams, memberships, boards,
 columns, tasks, labels, comments, attachments, notifications, and activity entries.

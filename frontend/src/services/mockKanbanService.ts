@@ -13,10 +13,10 @@ function activity(taskId: string, actorId: string, action: string): ActivityEntr
 
 function seed(): WorkspaceSnapshot {
   const users: Record<string, User> = {
-    u1: { id: 'u1', name: 'Maya Chen', email: 'maya@orbit.demo', role: 'owner', initials: 'MC', color: '#ff7a59' },
-    u2: { id: 'u2', name: 'Noah Williams', email: 'noah@orbit.demo', role: 'member', initials: 'NW', color: '#5b8def' },
-    u3: { id: 'u3', name: 'Priya Shah', email: 'priya@orbit.demo', role: 'member', initials: 'PS', color: '#7b61ff' },
-    u4: { id: 'u4', name: 'Leo Martin', email: 'leo@orbit.demo', role: 'member', initials: 'LM', color: '#13b981' },
+    u1: { id: 'u1', name: 'Maya Chen', email: 'maya@flowdeck.demo', role: 'owner', initials: 'MC', color: '#ff7a59' },
+    u2: { id: 'u2', name: 'Noah Williams', email: 'noah@flowdeck.demo', role: 'member', initials: 'NW', color: '#5b8def' },
+    u3: { id: 'u3', name: 'Priya Shah', email: 'priya@flowdeck.demo', role: 'member', initials: 'PS', color: '#7b61ff' },
+    u4: { id: 'u4', name: 'Leo Martin', email: 'leo@flowdeck.demo', role: 'member', initials: 'LM', color: '#13b981' },
   }
   const boards: Record<string, Board> = {
     b1: { id: 'b1', teamId: 'team-1', name: 'Product launch', columnIds: ['c1', 'c2', 'c3'], labelIds: ['l1', 'l2', 'l3'] },
@@ -40,7 +40,7 @@ function seed(): WorkspaceSnapshot {
     t4: task('t4', 'b1', 'c3', 'Choose the visual direction', 0, { assigneeId: 'u1', priority: 'Low', labelIds: ['l1'] }),
     t5: task('t5', 'b2', 'c4', 'Outline campaign themes', 0, { assigneeId: 'u3', priority: 'Medium', labelIds: ['l4'] }),
   }
-  return { version: 1, team: { id: 'team-1', name: 'Orbit Studio', currentUserId: 'u1', memberIds: Object.keys(users), boardIds: Object.keys(boards) }, users, boards, columns, labels, tasks, invitations: {}, notifications: {} }
+  return { version: 1, team: { id: 'team-1', name: 'Flowdeck Studio', currentUserId: 'u1', memberIds: Object.keys(users), boardIds: Object.keys(boards) }, users, boards, columns, labels, tasks, invitations: {}, notifications: {} }
 }
 
 export class MockKanbanService implements KanbanService {
@@ -64,6 +64,27 @@ export class MockKanbanService implements KanbanService {
 
   async getWorkspace() { return this.clone() }
   async resetDemo() { this.snapshot = seed(); return this.finish() }
+  async createWorkspace(input: { name: string; memberEmails: string[] }) {
+    const workspaceName = input.name.trim()
+    if (!workspaceName) throw new ServiceError('VALIDATION', 'Workspace name is required.')
+    const emails = [...new Set(input.memberEmails.map(email => email.trim().toLowerCase()).filter(Boolean))]
+    if (emails.some(email => !email.includes('@'))) throw new ServiceError('VALIDATION', 'Every member must have a valid email address.')
+    const owner = this.snapshot.users[this.snapshot.team.currentUserId]
+    const users: Record<string, User> = { [owner.id]: { ...owner, role: 'owner' } }
+    const colors = ['#5b8def', '#7b61ff', '#13b981', '#f3a712', '#ff7a59']
+    emails.forEach((email, index) => {
+      const name = email.split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase())
+      const initials = name.split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase()
+      const userId = id('user')
+      users[userId] = { id: userId, name, email, role: 'member', initials: initials || 'M', color: colors[index % colors.length] }
+    })
+    const teamId = id('team')
+    const boardId = id('board')
+    const columns: Record<string, Column> = {}
+    const columnIds = ['To Do', 'In Progress', 'Done'].map((name, order) => { const columnId = id('column'); columns[columnId] = { id: columnId, boardId, name, order }; return columnId })
+    this.snapshot = { version: 1, team: { id: teamId, name: workspaceName, currentUserId: owner.id, memberIds: Object.keys(users), boardIds: [boardId] }, users, boards: { [boardId]: { id: boardId, teamId, name: 'Getting started', columnIds, labelIds: [] } }, columns, labels: {}, tasks: {}, invitations: {}, notifications: {} }
+    return this.finish()
+  }
   async createBoard(name: string) { this.requireOwner(); const trimmed = name.trim(); if (!trimmed) throw new ServiceError('VALIDATION', 'Board name is required.'); const boardId = id('board'); const columnIds = ['To Do', 'In Progress', 'Done'].map((name, order) => { const columnId = id('column'); this.snapshot.columns[columnId] = { id: columnId, boardId, name, order }; return columnId }); this.snapshot.boards[boardId] = { id: boardId, teamId: this.snapshot.team.id, name: trimmed, columnIds, labelIds: [] }; this.snapshot.team.boardIds.push(boardId); return this.finish() }
   async deleteBoard(boardId: string) { this.requireOwner(); this.board(boardId); if (this.snapshot.team.boardIds.length === 1) throw new ServiceError('VALIDATION', 'A team must retain at least one board.'); delete this.snapshot.boards[boardId]; this.snapshot.team.boardIds = this.snapshot.team.boardIds.filter(id => id !== boardId); Object.keys(this.snapshot.columns).filter(id => this.snapshot.columns[id].boardId === boardId).forEach(id => delete this.snapshot.columns[id]); Object.keys(this.snapshot.tasks).filter(id => this.snapshot.tasks[id].boardId === boardId).forEach(id => delete this.snapshot.tasks[id]); return this.finish() }
   async addColumn(boardId: string, name: string) { const board = this.board(boardId); const trimmed = name.trim(); if (!trimmed) throw new ServiceError('VALIDATION', 'Column name is required.'); const columnId = id('column'); this.snapshot.columns[columnId] = { id: columnId, boardId, name: trimmed, order: board.columnIds.length }; board.columnIds.push(columnId); return this.finish() }

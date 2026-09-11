@@ -1,0 +1,1095 @@
+openapi: 3.1.0
+info:
+  title: Flowdeck Kanban API
+  version: 0.1.0
+  description: |
+    HTTP contract for the service boundary exposed by the Flowdeck frontend.
+
+    The current frontend uses a local mock implementation and does not send
+    credentials. Consequently, every operation below is marked as not requiring
+    HTTP authentication. The backend must still enforce the owner-only rules
+    called out on board and membership operations. If real accounts are added,
+    the same operations can be protected with the bearerAuth scheme without
+    changing their request or response shapes.
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Local backend
+tags:
+  - name: Workspace
+  - name: Boards
+  - name: Columns
+  - name: Labels
+  - name: Tasks
+  - name: Collaboration
+  - name: Notifications
+security: []
+paths:
+  /workspace:
+    get:
+      tags: [Workspace]
+      operationId: getWorkspace
+      summary: Get the current workspace snapshot
+      description: Returns the complete snapshot consumed by the frontend on initial load and refresh.
+      security: []
+      responses:
+        '200':
+          description: Current workspace snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceSnapshot'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /workspace/reset:
+    post:
+      tags: [Workspace]
+      operationId: resetDemo
+      summary: Reset the workspace to seeded demo data
+      description: Replaces the current workspace with the deterministic seeded demo workspace.
+      security: []
+      responses:
+        '200':
+          description: Reset workspace snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceSnapshot'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /workspaces:
+    post:
+      tags: [Workspace]
+      operationId: createWorkspace
+      summary: Create a workspace
+      description: Creates a workspace for the current user with one Getting started board and three default columns.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWorkspaceInput'
+      responses:
+        '200':
+          description: Newly created workspace snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceSnapshot'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /boards:
+    post:
+      tags: [Boards]
+      operationId: createBoard
+      summary: Create a board
+      description: Owner-only application action. The new board starts with To Do, In Progress, and Done columns.
+      security: []
+      x-required-role: owner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBoardRequest'
+      responses:
+        '200':
+          description: Updated workspace snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceSnapshot'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+  /boards/{boardId}:
+    delete:
+      tags: [Boards]
+      operationId: deleteBoard
+      summary: Delete a board
+      description: Owner-only application action. The final remaining board cannot be deleted.
+      security: []
+      x-required-role: owner
+      parameters:
+        - $ref: '#/components/parameters/BoardId'
+      responses:
+        '200':
+          description: Updated workspace snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceSnapshot'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /boards/{boardId}/columns:
+    post:
+      tags: [Columns]
+      operationId: addColumn
+      summary: Add a column to a board
+      description: Adds a column at the end of the board's ordered column list.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/BoardId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateColumnRequest'
+      responses:
+        '200':
+          description: Updated workspace snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceSnapshot'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /columns/{columnId}:
+    patch:
+      tags: [Columns]
+      operationId: renameColumn
+      summary: Rename a column
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ColumnId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenameRequest'
+      responses:
+        '200':
+          description: Updated workspace snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceSnapshot'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+    delete:
+      tags: [Columns]
+      operationId: deleteColumn
+      summary: Delete a column
+      description: Deletes a column. Active tasks must be moved to destinationColumnId first; a board must retain at least one column.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ColumnId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteColumnRequest'
+      responses:
+        '200':
+          description: Updated workspace snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceSnapshot'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /boards/{boardId}/columns/order:
+    put:
+      tags: [Columns]
+      operationId: reorderColumns
+      summary: Reorder a board's columns
+      description: Replaces the complete column order. The request must contain exactly the board's existing column IDs.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/BoardId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderColumnsRequest'
+      responses:
+        '200':
+          description: Updated workspace snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceSnapshot'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /boards/{boardId}/labels:
+    post:
+      tags: [Labels]
+      operationId: createLabel
+      summary: Create a board label
+      description: Creates a label scoped to the board. Names must be unique within that board.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/BoardId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLabelInput'
+      responses:
+        '200':
+          description: Updated workspace snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceSnapshot'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /labels/{labelId}:
+    patch:
+      tags: [Labels]
+      operationId: renameLabel
+      summary: Rename a label
+      description: Renames a label while preserving its board scope; names must remain unique within that board.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/LabelId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenameRequest'
+      responses:
+        '200':
+          description: Updated workspace snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceSnapshot'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+    delete:
+      tags: [Labels]
+      operationId: deleteLabel
+      summary: Delete a label
+      description: Removes the label and unassigns it from every task on its board.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/LabelId'
+      responses:
+        '200':
+          description: Updated workspace snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceSnapshot'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /tasks:
+    post:
+      tags: [Tasks]
+      operationId: createTask
+      summary: Create a task
+      description: Creates an active task at the end of the selected column.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskInput'
+      responses:
+        '200':
+          description: Updated workspace snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceSnapshot'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /tasks/{taskId}:
+    patch:
+      tags: [Tasks]
+      operationId: updateTask
+      summary: Update task details
+      description: Partially updates supported task fields. Omitted fields remain unchanged.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTaskInput'
+      responses:
+        '200':
+          description: Updated workspace snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceSnapshot'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+    delete:
+      tags: [Tasks]
+      operationId: deleteTask
+      summary: Delete a task
+      description: Permanently removes the task and reindexes remaining tasks in its column.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      responses:
+        '200':
+          description: Updated workspace snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceSnapshot'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /tasks/{taskId}/move:
+    post:
+      tags: [Tasks]
+      operationId: moveTask
+      summary: Move a task
+      description: Moves a task to a column and inserts it at the requested zero-based position.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoveTaskRequest'
+      responses:
+        '200':
+          description: Updated workspace snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceSnapshot'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /tasks/{taskId}/archive:
+    post:
+      tags: [Tasks]
+      operationId: archiveTask
+      summary: Archive a task
+      description: Archives the task and preserves its current column for restoration.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      responses:
+        '200':
+          description: Updated workspace snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceSnapshot'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /tasks/{taskId}/restore:
+    post:
+      tags: [Tasks]
+      operationId: restoreTask
+      summary: Restore a task
+      description: Restores the task to its archived column, or to the board's first available column if that column no longer exists.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      responses:
+        '200':
+          description: Updated workspace snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceSnapshot'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /tasks/{taskId}/checklist:
+    post:
+      tags: [Tasks]
+      operationId: addChecklistItem
+      summary: Add a checklist item
+      description: Adds a flat, incomplete checklist item at the end of the task checklist.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddChecklistItemRequest'
+      responses:
+        '200':
+          description: Updated workspace snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceSnapshot'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /tasks/{taskId}/checklist/{itemId}:
+    patch:
+      tags: [Tasks]
+      operationId: updateChecklistItem
+      summary: Update a checklist item
+      description: Updates the checklist item's text and/or completion state.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+        - $ref: '#/components/parameters/ChecklistItemId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateChecklistItemRequest'
+      responses:
+        '200':
+          description: Updated workspace snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceSnapshot'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+    delete:
+      tags: [Tasks]
+      operationId: deleteChecklistItem
+      summary: Delete a checklist item
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+        - $ref: '#/components/parameters/ChecklistItemId'
+      responses:
+        '200':
+          description: Updated workspace snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceSnapshot'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /tasks/{taskId}/comments:
+    post:
+      tags: [Collaboration]
+      operationId: addComment
+      summary: Add a task comment
+      description: Adds a comment and creates in-app notifications for valid mentions of other team members.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddCommentRequest'
+      responses:
+        '200':
+          description: Updated workspace snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceSnapshot'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /tasks/{taskId}/comments/{commentId}/reaction:
+    patch:
+      tags: [Collaboration]
+      operationId: toggleReaction
+      summary: Toggle a reaction on a comment
+      description: Adds the current user's reaction when absent and removes it when already present. Supported reactions are 👍, ❤️, 🎉, and 👀.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+        - $ref: '#/components/parameters/CommentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToggleReactionRequest'
+      responses:
+        '200':
+          description: Updated workspace snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceSnapshot'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /tasks/{taskId}/attachments:
+    post:
+      tags: [Collaboration]
+      operationId: addAttachment
+      summary: Add a mock attachment to a task
+      description: Stores attachment metadata. The current frontend passes only name, byte size, and content type; it does not upload file bytes.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddAttachmentRequest'
+      responses:
+        '200':
+          description: Updated workspace snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceSnapshot'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /tasks/{taskId}/attachments/{attachmentId}:
+    delete:
+      tags: [Collaboration]
+      operationId: removeAttachment
+      summary: Remove an attachment from a task
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+        - $ref: '#/components/parameters/AttachmentId'
+      responses:
+        '200':
+          description: Updated workspace snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceSnapshot'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /members/invitations:
+    post:
+      tags: [Collaboration]
+      operationId: inviteMember
+      summary: Invite a team member
+      description: Owner-only application action. Creates a pending invitation; real email delivery is outside the current frontend scope.
+      security: []
+      x-required-role: owner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteMemberRequest'
+      responses:
+        '200':
+          description: Updated workspace snapshot containing the pending invitation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceSnapshot'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+  /invitations/{invitationId}/accept:
+    post:
+      tags: [Collaboration]
+      operationId: acceptInvitation
+      summary: Accept an invitation
+      description: Simulates invitation acceptance in the demo workspace.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/InvitationId'
+      responses:
+        '200':
+          description: Updated workspace snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceSnapshot'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /notifications/{notificationId}/read:
+    patch:
+      tags: [Notifications]
+      operationId: markNotificationRead
+      summary: Mark a notification as read
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/NotificationId'
+      responses:
+        '200':
+          description: Updated workspace snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceSnapshot'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Reserved for a future authenticated HTTP adapter; the current frontend sends no credentials.
+  parameters:
+    BoardId:
+      name: boardId
+      in: path
+      required: true
+      schema: { type: string }
+    ColumnId:
+      name: columnId
+      in: path
+      required: true
+      schema: { type: string }
+    LabelId:
+      name: labelId
+      in: path
+      required: true
+      schema: { type: string }
+    TaskId:
+      name: taskId
+      in: path
+      required: true
+      schema: { type: string }
+    ChecklistItemId:
+      name: itemId
+      in: path
+      required: true
+      schema: { type: string }
+    CommentId:
+      name: commentId
+      in: path
+      required: true
+      schema: { type: string }
+    AttachmentId:
+      name: attachmentId
+      in: path
+      required: true
+      schema: { type: string }
+    InvitationId:
+      name: invitationId
+      in: path
+      required: true
+      schema: { type: string }
+    NotificationId:
+      name: notificationId
+      in: path
+      required: true
+      schema: { type: string }
+  responses:
+    ValidationError:
+      description: Request failed frontend service validation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ServiceError'
+    ForbiddenError:
+      description: The current user is not allowed to perform this owner-only action.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ServiceError'
+    NotFoundError:
+      description: Referenced entity was not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ServiceError'
+    ConflictError:
+      description: Operation conflicts with existing workspace data, such as a duplicate label.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ServiceError'
+    ServerError:
+      description: Unexpected backend failure.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ServiceError'
+  schemas:
+    CreateWorkspaceInput:
+      type: object
+      additionalProperties: false
+      required: [name, memberEmails]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        memberEmails:
+          type: array
+          items: { type: string, format: email }
+          default: []
+    CreateBoardRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1 }
+    CreateColumnRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1 }
+    RenameRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1 }
+    DeleteColumnRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        destinationColumnId:
+          type: string
+          description: Required when the column contains active tasks.
+    ReorderColumnsRequest:
+      type: object
+      additionalProperties: false
+      required: [orderedColumnIds]
+      properties:
+        orderedColumnIds:
+          type: array
+          items: { type: string }
+    CreateLabelInput:
+      type: object
+      additionalProperties: false
+      required: [boardId, name, color]
+      properties:
+        boardId: { type: string }
+        name: { type: string, minLength: 1 }
+        color: { type: string, minLength: 1 }
+    CreateTaskInput:
+      type: object
+      additionalProperties: false
+      required: [boardId, columnId, title]
+      properties:
+        boardId: { type: string }
+        columnId: { type: string }
+        title: { type: string, minLength: 1 }
+        description: { type: string }
+        priority:
+          $ref: '#/components/schemas/Priority'
+        assigneeId: { type: string }
+    UpdateTaskInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        title: { type: string, minLength: 1 }
+        description: { type: string }
+        assigneeId: { type: string }
+        dueDate:
+          type: string
+          format: date
+        priority:
+          $ref: '#/components/schemas/Priority'
+        labelIds:
+          type: array
+          items: { type: string }
+        blocked: { type: boolean }
+    MoveTaskRequest:
+      type: object
+      additionalProperties: false
+      required: [destinationColumnId, destinationIndex]
+      properties:
+        destinationColumnId: { type: string }
+        destinationIndex:
+          type: integer
+          minimum: 0
+    AddChecklistItemRequest:
+      type: object
+      additionalProperties: false
+      required: [text]
+      properties:
+        text: { type: string, minLength: 1 }
+    UpdateChecklistItemRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        text: { type: string, minLength: 1 }
+        completed: { type: boolean }
+    AddCommentRequest:
+      type: object
+      additionalProperties: false
+      required: [body]
+      properties:
+        body: { type: string, minLength: 1 }
+    ToggleReactionRequest:
+      type: object
+      additionalProperties: false
+      required: [reaction]
+      properties:
+        reaction:
+          type: string
+          enum: [👍, ❤️, 🎉, 👀]
+    AddAttachmentRequest:
+      type: object
+      additionalProperties: false
+      required: [name, size, contentType]
+      properties:
+        name: { type: string, minLength: 1 }
+        size:
+          type: integer
+          minimum: 0
+        contentType: { type: string }
+    InviteMemberRequest:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+    Priority:
+      type: string
+      enum: [Low, Medium, High, Urgent]
+    Role:
+      type: string
+      enum: [owner, member]
+    User:
+      type: object
+      required: [id, name, email, role, initials, color]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string, format: email }
+        role: { $ref: '#/components/schemas/Role' }
+        initials: { type: string }
+        color: { type: string }
+    Label:
+      type: object
+      required: [id, boardId, name, color]
+      properties:
+        id: { type: string }
+        boardId: { type: string }
+        name: { type: string }
+        color: { type: string }
+    ChecklistItem:
+      type: object
+      required: [id, text, completed, order]
+      properties:
+        id: { type: string }
+        text: { type: string }
+        completed: { type: boolean }
+        order: { type: integer }
+    Comment:
+      type: object
+      required: [id, taskId, authorId, body, mentionedUserIds, reactions, createdAt]
+      properties:
+        id: { type: string }
+        taskId: { type: string }
+        authorId: { type: string }
+        body: { type: string }
+        mentionedUserIds:
+          type: array
+          items: { type: string }
+        reactions:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+        createdAt: { type: string, format: date-time }
+    Attachment:
+      type: object
+      required: [id, taskId, name, size, contentType, createdAt]
+      properties:
+        id: { type: string }
+        taskId: { type: string }
+        name: { type: string }
+        size: { type: integer, minimum: 0 }
+        contentType: { type: string }
+        createdAt: { type: string, format: date-time }
+    ActivityEntry:
+      type: object
+      required: [id, taskId, actorId, action, createdAt]
+      properties:
+        id: { type: string }
+        taskId: { type: string }
+        actorId: { type: string }
+        action: { type: string }
+        createdAt: { type: string, format: date-time }
+    Task:
+      type: object
+      required: [id, boardId, columnId, title, description, labelIds, blocked, archived, order, checklist, comments, attachments, activity]
+      properties:
+        id: { type: string }
+        boardId: { type: string }
+        columnId: { type: string }
+        title: { type: string }
+        description: { type: string }
+        assigneeId: { type: string }
+        dueDate: { type: string, format: date }
+        priority: { $ref: '#/components/schemas/Priority' }
+        labelIds:
+          type: array
+          items: { type: string }
+        blocked: { type: boolean }
+        archived: { type: boolean }
+        archivedFromColumnId: { type: string }
+        order: { type: integer }
+        checklist:
+          type: array
+          items: { $ref: '#/components/schemas/ChecklistItem' }
+        comments:
+          type: array
+          items: { $ref: '#/components/schemas/Comment' }
+        attachments:
+          type: array
+          items: { $ref: '#/components/schemas/Attachment' }
+        activity:
+          type: array
+          items: { $ref: '#/components/schemas/ActivityEntry' }
+    Column:
+      type: object
+      required: [id, boardId, name, order]
+      properties:
+        id: { type: string }
+        boardId: { type: string }
+        name: { type: string }
+        order: { type: integer }
+    Board:
+      type: object
+      required: [id, teamId, name, columnIds, labelIds]
+      properties:
+        id: { type: string }
+        teamId: { type: string }
+        name: { type: string }
+        columnIds:
+          type: array
+          items: { type: string }
+        labelIds:
+          type: array
+          items: { type: string }
+    Invitation:
+      type: object
+      required: [id, teamId, email, createdAt, accepted]
+      properties:
+        id: { type: string }
+        teamId: { type: string }
+        email: { type: string, format: email }
+        createdAt: { type: string, format: date-time }
+        accepted: { type: boolean }
+    Notification:
+      type: object
+      required: [id, recipientId, taskId, boardId, authorId, body, read, createdAt]
+      properties:
+        id: { type: string }
+        recipientId: { type: string }
+        taskId: { type: string }
+        boardId: { type: string }
+        authorId: { type: string }
+        body: { type: string }
+        read: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    Team:
+      type: object
+      required: [id, name, currentUserId, memberIds, boardIds]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        currentUserId: { type: string }
+        memberIds:
+          type: array
+          items: { type: string }
+        boardIds:
+          type: array
+          items: { type: string }
+    WorkspaceSnapshot:
+      type: object
+      required: [version, team, users, boards, columns, labels, tasks, invitations, notifications]
+      properties:
+        version:
+          type: integer
+          enum: [1]
+        team: { $ref: '#/components/schemas/Team' }
+        users:
+          type: object
+          additionalProperties: { $ref: '#/components/schemas/User' }
+        boards:
+          type: object
+          additionalProperties: { $ref: '#/components/schemas/Board' }
+        columns:
+          type: object
+          additionalProperties: { $ref: '#/components/schemas/Column' }
+        labels:
+          type: object
+          additionalProperties: { $ref: '#/components/schemas/Label' }
+        tasks:
+          type: object
+          additionalProperties: { $ref: '#/components/schemas/Task' }
+        invitations:
+          type: object
+          additionalProperties: { $ref: '#/components/schemas/Invitation' }
+        notifications:
+          type: object
+          additionalProperties: { $ref: '#/components/schemas/Notification' }
+    ServiceError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Machine-readable ServiceError code, such as VALIDATION, NOT_FOUND, FORBIDDEN, DESTINATION_REQUIRED, or DUPLICATE_LABEL.
+        message: { type: string }

@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timezone
+from functools import wraps
+import json
+import os
 import re
 from typing import Literal
 from uuid import uuid4
@@ -11,6 +14,9 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import Text, create_engine
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
+from sqlalchemy.pool import StaticPool
 
 
 Priority = Literal["Low", "Medium", "High", "Urgent"]
@@ -238,17 +244,71 @@ def new_id(prefix: str) -> str:
     return f"{prefix}-{uuid4().hex[:7]}"
 
 
-class MockDatabase:
-    def __init__(self) -> None:
-        self.reset()
+class Base(DeclarativeBase):
+    pass
+
+
+class WorkspaceState(Base):
+    """Portable persistence boundary for the current workspace snapshot.
+
+    The API currently exposes one workspace snapshot. Keeping it in a regular
+    SQL table lets the service move from SQLite to another SQLAlchemy dialect
+    without coupling the application to a vendor-specific JSON type.
+    """
+
+    __tablename__ = "workspace_state"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    snapshot: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+def load_snapshot_before_mutation(method):
+    @wraps(method)
+    def wrapper(self: "Database", *args, **kwargs):
+        self.snapshot = self._load_snapshot() or self._seed()
+        return method(self, *args, **kwargs)
+
+    return wrapper
+
+
+class Database:
+    def __init__(self, database_url: str | None = None) -> None:
+        self.database_url = database_url or os.getenv("DATABASE_URL", "sqlite:///./flowdeck.db")
+        engine_options = {}
+        if self.database_url.startswith("sqlite"):
+            engine_options["connect_args"] = {"check_same_thread": False}
+            if self.database_url in {"sqlite://", "sqlite:///:memory:"}:
+                engine_options["poolclass"] = StaticPool
+        self.engine = create_engine(self.database_url, **engine_options)
+        Base.metadata.create_all(self.engine)
+        self.snapshot = self._load_snapshot()
+        if self.snapshot is None:
+            self.reset()
+
+    def _load_snapshot(self) -> dict | None:
+        with Session(self.engine) as session:
+            row = session.get(WorkspaceState, 1)
+            return json.loads(row.snapshot) if row else None
+
+    def _save_snapshot(self, snapshot: dict) -> None:
+        serialized = json.dumps(snapshot)
+        with Session(self.engine) as session, session.begin():
+            row = session.get(WorkspaceState, 1)
+            if row is None:
+                session.add(WorkspaceState(id=1, snapshot=serialized))
+            else:
+                row.snapshot = serialized
 
     def reset(self) -> None:
         self.snapshot = self._seed()
+        self._save_snapshot(self.snapshot)
 
     def clone(self) -> dict:
+        self.snapshot = self._load_snapshot() or self._seed()
         return deepcopy(self.snapshot)
 
     def finish(self) -> dict:
+        self._save_snapshot(self.snapshot)
         return self.clone()
 
     def _activity(self, task_id: str, actor_id: str, action: str) -> dict:
@@ -321,6 +381,7 @@ class MockDatabase:
         for index, task in enumerate(tasks):
             task["order"] = index
 
+    @load_snapshot_before_mutation
     def create_workspace(self, input: CreateWorkspaceInput) -> dict:
         name = input.name.strip()
         if not name:
@@ -346,6 +407,7 @@ class MockDatabase:
         self.snapshot = {"version": 1, "team": {"id": team_id, "name": name, "currentUserId": owner["id"], "memberIds": list(users), "boardIds": [board_id]}, "users": users, "boards": {board_id: {"id": board_id, "teamId": team_id, "name": "Getting started", "columnIds": column_ids, "labelIds": []}}, "columns": columns, "labels": {}, "tasks": {}, "invitations": {}, "notifications": {}}
         return self.finish()
 
+    @load_snapshot_before_mutation
     def create_board(self, name: str) -> dict:
         self.require_owner()
         name = name.strip()
@@ -361,6 +423,7 @@ class MockDatabase:
         self.snapshot["team"]["boardIds"].append(board_id)
         return self.finish()
 
+    @load_snapshot_before_mutation
     def delete_board(self, board_id: str) -> dict:
         self.require_owner()
         self.board(board_id)
@@ -374,6 +437,7 @@ class MockDatabase:
             del self.snapshot["tasks"][task_id]
         return self.finish()
 
+    @load_snapshot_before_mutation
     def add_column(self, board_id: str, name: str) -> dict:
         board = self.board(board_id)
         name = name.strip()
@@ -384,6 +448,7 @@ class MockDatabase:
         board["columnIds"].append(column_id)
         return self.finish()
 
+    @load_snapshot_before_mutation
     def rename_column(self, column_id: str, name: str) -> dict:
         column = self.snapshot["columns"].get(column_id)
         if not column:
@@ -394,6 +459,7 @@ class MockDatabase:
         column["name"] = name
         return self.finish()
 
+    @load_snapshot_before_mutation
     def reorder_columns(self, board_id: str, ordered_column_ids: list[str]) -> dict:
         board = self.board(board_id)
         if len(ordered_column_ids) != len(board["columnIds"]) or any(column_id not in board["columnIds"] for column_id in ordered_column_ids):
@@ -403,6 +469,7 @@ class MockDatabase:
             self.snapshot["columns"][column_id]["order"] = order
         return self.finish()
 
+    @load_snapshot_before_mutation
     def delete_column(self, column_id: str, destination_column_id: str | None) -> dict:
         column = self.snapshot["columns"].get(column_id)
         if not column:
@@ -422,6 +489,7 @@ class MockDatabase:
         del self.snapshot["columns"][column_id]
         return self.finish()
 
+    @load_snapshot_before_mutation
     def create_label(self, input: CreateLabelInput) -> dict:
         board = self.board(input.boardId)
         name = input.name.strip()
@@ -434,6 +502,7 @@ class MockDatabase:
         board["labelIds"].append(label_id)
         return self.finish()
 
+    @load_snapshot_before_mutation
     def rename_label(self, label_id: str, name: str) -> dict:
         label = self.snapshot["labels"].get(label_id)
         if not label:
@@ -447,6 +516,7 @@ class MockDatabase:
         label["name"] = name
         return self.finish()
 
+    @load_snapshot_before_mutation
     def delete_label(self, label_id: str) -> dict:
         label = self.snapshot["labels"].get(label_id)
         if not label:
@@ -459,6 +529,7 @@ class MockDatabase:
         del self.snapshot["labels"][label_id]
         return self.finish()
 
+    @load_snapshot_before_mutation
     def create_task(self, input: CreateTaskInput) -> dict:
         board = self.board(input.boardId)
         if input.columnId not in board["columnIds"]:
@@ -473,6 +544,7 @@ class MockDatabase:
         self.snapshot["tasks"][task_id] = {"id": task_id, "boardId": input.boardId, "columnId": input.columnId, "title": title, "description": input.description, "assigneeId": input.assigneeId, "priority": input.priority, "labelIds": [], "blocked": False, "archived": False, "order": order, "checklist": [], "comments": [], "attachments": [], "activity": [self._activity(task_id, self.snapshot["team"]["currentUserId"], "created this task")]}
         return self.finish()
 
+    @load_snapshot_before_mutation
     def update_task(self, task_id: str, input: UpdateTaskInput) -> dict:
         task = self.task(task_id)
         values = input.model_dump(exclude_unset=True)
@@ -493,12 +565,14 @@ class MockDatabase:
             self.add_activity(task, "marked this task blocked" if task["blocked"] else "cleared the blocked state")
         return self.finish()
 
+    @load_snapshot_before_mutation
     def delete_task(self, task_id: str) -> dict:
         task = self.task(task_id)
         del self.snapshot["tasks"][task_id]
         self.reorder_tasks(task["columnId"])
         return self.finish()
 
+    @load_snapshot_before_mutation
     def move_task(self, task_id: str, destination_column_id: str, destination_index: int) -> dict:
         task = self.task(task_id)
         destination = self.snapshot["columns"].get(destination_column_id)
@@ -515,6 +589,7 @@ class MockDatabase:
         self.add_activity(task, f"moved from {old_column['name']} to {destination['name']}")
         return self.finish()
 
+    @load_snapshot_before_mutation
     def archive_task(self, task_id: str) -> dict:
         task = self.task(task_id)
         task["archivedFromColumnId"] = task["columnId"]
@@ -523,6 +598,7 @@ class MockDatabase:
         self.reorder_tasks(task["columnId"])
         return self.finish()
 
+    @load_snapshot_before_mutation
     def restore_task(self, task_id: str) -> dict:
         task = self.task(task_id)
         board = self.board(task["boardId"])
@@ -532,6 +608,7 @@ class MockDatabase:
         self.add_activity(task, "restored this task")
         return self.finish()
 
+    @load_snapshot_before_mutation
     def add_checklist_item(self, task_id: str, text: str) -> dict:
         task = self.task(task_id)
         text = text.strip()
@@ -540,6 +617,7 @@ class MockDatabase:
         task["checklist"].append({"id": new_id("check"), "text": text, "completed": False, "order": len(task["checklist"])})
         return self.finish()
 
+    @load_snapshot_before_mutation
     def update_checklist_item(self, task_id: str, item_id: str, input: UpdateChecklistItemRequest) -> dict:
         items = self.task(task_id)["checklist"]
         item = next((value for value in items if value["id"] == item_id), None)
@@ -554,11 +632,13 @@ class MockDatabase:
         item.update(values)
         return self.finish()
 
+    @load_snapshot_before_mutation
     def delete_checklist_item(self, task_id: str, item_id: str) -> dict:
         task = self.task(task_id)
         task["checklist"] = [{**item, "order": order} for order, item in enumerate(task["checklist"]) if item["id"] != item_id]
         return self.finish()
 
+    @load_snapshot_before_mutation
     def add_comment(self, task_id: str, body: str) -> dict:
         task = self.task(task_id)
         body = body.strip()
@@ -577,6 +657,7 @@ class MockDatabase:
                 self.snapshot["notifications"][notification_id] = {"id": notification_id, "recipientId": recipient_id, "taskId": task_id, "boardId": task["boardId"], "authorId": self.snapshot["team"]["currentUserId"], "body": body, "read": False, "createdAt": now()}
         return self.finish()
 
+    @load_snapshot_before_mutation
     def toggle_reaction(self, task_id: str, comment_id: str, reaction: str) -> dict:
         comment = next((value for value in self.task(task_id)["comments"] if value["id"] == comment_id), None)
         if not comment:
@@ -586,6 +667,7 @@ class MockDatabase:
         comment["reactions"][reaction] = [user_id for user_id in users if user_id != current_user_id] if current_user_id in users else [*users, current_user_id]
         return self.finish()
 
+    @load_snapshot_before_mutation
     def add_attachment(self, task_id: str, input: AddAttachmentRequest) -> dict:
         task = self.task(task_id)
         name = input.name.strip()
@@ -594,11 +676,13 @@ class MockDatabase:
         task["attachments"].append({"id": new_id("attachment"), "taskId": task_id, "name": name, "size": input.size, "contentType": input.contentType, "createdAt": now()})
         return self.finish()
 
+    @load_snapshot_before_mutation
     def remove_attachment(self, task_id: str, attachment_id: str) -> dict:
         task = self.task(task_id)
         task["attachments"] = [attachment for attachment in task["attachments"] if attachment["id"] != attachment_id]
         return self.finish()
 
+    @load_snapshot_before_mutation
     def invite_member(self, email: str) -> dict:
         self.require_owner()
         email = email.strip().lower()
@@ -608,6 +692,7 @@ class MockDatabase:
         self.snapshot["invitations"][invitation_id] = {"id": invitation_id, "teamId": self.snapshot["team"]["id"], "email": email, "createdAt": now(), "accepted": False}
         return self.finish()
 
+    @load_snapshot_before_mutation
     def accept_invitation(self, invitation_id: str) -> dict:
         invitation = self.snapshot["invitations"].get(invitation_id)
         if not invitation:
@@ -615,6 +700,7 @@ class MockDatabase:
         invitation["accepted"] = True
         return self.finish()
 
+    @load_snapshot_before_mutation
     def mark_notification_read(self, notification_id: str) -> dict:
         notification = self.snapshot["notifications"].get(notification_id)
         if not notification:
@@ -623,7 +709,7 @@ class MockDatabase:
         return self.finish()
 
 
-database = MockDatabase()
+database = Database()
 app = FastAPI(title="Flowdeck Kanban API", version="0.1.0", description="Mock backend for the Flowdeck frontend.")
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 

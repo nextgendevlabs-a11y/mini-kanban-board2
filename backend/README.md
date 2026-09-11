@@ -1,8 +1,9 @@
 # Flowdeck backend
 
-FastAPI mock backend for the frontend's service contract. The database is an
-in-memory seeded workspace and is intentionally replaceable with a persistent
-implementation later.
+FastAPI backend for the frontend's service contract. Workspace state is stored
+with SQLAlchemy in a database selected by `DATABASE_URL`. SQLite is the default
+and stores data in `backend/flowdeck.db` when the server is run from this
+directory.
 
 Install dependencies and run the tests:
 
@@ -10,6 +11,18 @@ Install dependencies and run the tests:
 uv sync
 uv run pytest
 ```
+
+To use another SQLAlchemy-supported database, set `DATABASE_URL` before
+starting the server. For example:
+
+```powershell
+$env:DATABASE_URL = "sqlite:///./flowdeck-dev.db"
+uv run uvicorn backend.main:app --reload --port 8000
+```
+
+The application uses a standard SQLAlchemy engine and does not depend on
+SQLite-specific queries, so a PostgreSQL URL can be supplied later once its
+SQLAlchemy driver is installed.
 
 Run the API locally:
 

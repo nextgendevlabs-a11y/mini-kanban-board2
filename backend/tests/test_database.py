@@ -18,6 +18,20 @@ def test_workspace_snapshot_persists_between_database_instances(tmp_path) -> Non
     assert snapshot["boards"][board_id]["name"] == "Persisted board"
 
 
+def test_reset_persists_seed_for_new_database_instances(tmp_path) -> None:
+    database_url = sqlite_url(tmp_path / "flowdeck.db")
+
+    database = Database(database_url)
+    database.create_board("Temporary board")
+    database.reset()
+
+    reloaded = Database(database_url)
+    snapshot = reloaded.clone()
+
+    assert snapshot["team"]["name"] == "Flowdeck Studio"
+    assert all(board["name"] != "Temporary board" for board in snapshot["boards"].values())
+
+
 def test_database_url_environment_variable_selects_engine(monkeypatch, tmp_path) -> None:
     database_url = sqlite_url(tmp_path / "configured.db")
     monkeypatch.setenv("DATABASE_URL", database_url)
